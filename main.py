@@ -31,12 +31,20 @@ def downsample_dataset(dataframe: DataFrame, desired_count: int) -> DataFrame:
     return balanced_df
 
 
+def filter_dataset(dataframe: DataFrame) -> DataFrame:
+    category_filter = dataframe[(dataframe['label_high'] == "tu interpolska") |
+                                (dataframe['label_high'] == "odpowiedzi niestandardowe") |
+                                (dataframe['label_high'] == "prawo podatkowe") |
+                                (dataframe['label_high'] == "prawo konstytucyjne") |
+                                (dataframe['label_high'] == "prawo miädzynarodowe")].index
+    dataframe.drop(category_filter, inplace=True)
+    return dataframe
+
+
 def get_values_from_dataset(path: str) -> Tuple[List[str], List[str]]:
     df = pd.read_csv(path, sep=";")
     df = df.dropna()
-    category_filter = df[(df['label_high'] == "tu interpolska") | (df['label_high'] == "prawo konstytucyjne")].index
-    df.drop(category_filter, inplace=True)
-
+    df = filter_dataset(df)
     balanced_df = downsample_dataset(df, 225)
     x = balanced_df["text_full"].tolist()
     y = balanced_df["label_high"].tolist()
