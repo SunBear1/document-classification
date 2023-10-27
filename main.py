@@ -3,6 +3,7 @@ from typing import Tuple, List
 import re
 import pandas as pd
 import matplotlib.pyplot as plt
+from pandas import DataFrame
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
@@ -10,28 +11,39 @@ from sklearn.metrics import (
     accuracy_score,
     f1_score,
 )
-from nltk.tokenize import word_tokenize
-import nltk
 
-nltk.download('punkt')
+with open("connecting_words.lst", "r") as f:
+    CONNECTING_WORDS = f.read().splitlines()
 
-CONNECTING_WORDS = ['czy', 'w', 'a', 'o', 'po', 'ich', 'jest', 'dla', 'i', '', 'z', 'na', 'do', 'że', 'od', 'by', 'je',
-                    'się', 'żeby', 'co', 'które', 'te', 'lub', 'niż', 'przez', 'gdy', 'bo', 'jak', 'być', 'bez', 'albo',
-                    'tak', 'ten', 'tylko', 'więc', 'już', 'która', 'mi', 'nad', 'ale', 'poza', 'raz', 'razem', 'to', 'wiec',
-                    'właśnie', 'wszystko', 'każdy', 'kiedy', 'lecz', 'mają', 'może', 'na', 'nawet', 'nim', 'nów', 'od', 'około',
-                    'prawie', 'przecież', 'są', 'tego', 'to', 'trzeba', 'tu', 'w', 'we', 'z', 'za']
+
+def downsample_dataset(dataframe: DataFrame, desired_count: int) -> DataFrame:
+    category_counts = dataframe['label_high'].value_counts()
+    balanced_df = pd.DataFrame(columns=dataframe.columns)
+    for category in dataframe['label_high'].unique():
+        category_data = dataframe[dataframe['label_high'] == category]
+
+        if category_counts[category] > desired_count:
+            sampled_data = category_data.sample(desired_count,
+                                                random_state=42)
+        else:
+            sampled_data = category_data
+        balanced_df = pd.concat([balanced_df, sampled_data], ignore_index=True)
+    return balanced_df
 
 
 def get_values_from_dataset(path: str) -> Tuple[List[str], List[str]]:
     df = pd.read_csv(path, sep=";")
     df = df.dropna()
-    x = df["text_full"].tolist()
-    y = df["label_high"].tolist()
+    category_filter = df[(df['label_high'] == "tu interpolska") | (df['label_high'] == "prawo konstytucyjne")].index
+    df.drop(category_filter, inplace=True)
+
+    balanced_df = downsample_dataset(df, 225)
+    x = balanced_df["text_full"].tolist()
+    y = balanced_df["label_high"].tolist()
     return x, y
 
 
 def preprocess_sentence(text):
-    # Convert to lowercase
     text = text.lower()
     text = re.sub(r'[^a-zA-Ząćęłńóśźż\s]', '', text)
     text = ' '.join(text.split())
@@ -48,10 +60,14 @@ def remove_connecting_words(text):
 
 if __name__ == "__main__":
     sentences, categories = get_values_from_dataset(path="dataset.csv")
+    print("---------------------Welcome---------------------")
+    print(f"List of categories: {list(set(categories))}")
+    print(f"Number of occurrences per category")
+    print(pd.Series(categories).value_counts())
     processed_sentences = [preprocess_sentence(sentence) for sentence in sentences]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        processed_sentences, categories, test_size=0.15, random_state=125
+        processed_sentences, categories, test_size=0.10, random_state=125
     )
 
     tfidf_vectorizer = TfidfVectorizer()
@@ -66,10 +82,12 @@ if __name__ == "__main__":
     accuracy = accuracy_score(y_pred, y_test)
     f1 = f1_score(y_pred, y_test, average="weighted")
 
-    print(X_test[3])
+    print("---------------------Results---------------------")
+    print(f"Sample text:  {X_test[3]}")
     predicted = model.predict(x_test_featured[3])
     print("Actual Value:", y_test[3])
     print("Predicted Value:", predicted[0])
 
     print("Accuracy:", accuracy)
     print("F1 Score:", f1)
+    print("-------------------------------------------------")
