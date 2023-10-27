@@ -12,7 +12,7 @@ from sklearn.metrics import (
     f1_score,
 )
 
-with open("connecting_words.lst", "r") as f:
+with open("data/connecting_words.lst", "r") as f:
     CONNECTING_WORDS = f.read().splitlines()
 
 
@@ -67,7 +67,7 @@ def remove_connecting_words(text):
 
 
 if __name__ == "__main__":
-    sentences, categories = get_values_from_dataset(path="dataset.csv")
+    sentences, categories = get_values_from_dataset(path="data/dataset.csv")
     print("---------------------Welcome---------------------")
     print(f"List of categories: {list(set(categories))}")
     print(f"Number of occurrences per category")
