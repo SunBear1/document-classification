@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Any
 import requests
 import wandb
 import re
@@ -7,6 +7,7 @@ import random
 import numpy as np
 import pandas as pd
 from keras.src.callbacks import EarlyStopping, LearningRateScheduler
+from numpy import ndarray, dtype
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
@@ -21,82 +22,63 @@ from keras.layers import Embedding, Flatten, Dense, Conv1D, MaxPooling1D, Global
     Activation, SpatialDropout1D
 from wandb.keras import WandbCallback
 
-#wandb.login()
+# wandb.login()
 
-# GLOBAL HYPERPARAMETER OPTIONS
-# is_down_sampled = [True, False]
-# polish_chars_removed = [True, False]
-# numbers_replaced_with_single_word = [True, False]
-# nr_of_epochs = [40, 50]
-# test_val_size = 0.3 To chyba nie podlega parametryzacji, jako że 70/20/10 pozwala nam zachować godność i wiarygodność pomiarów
-# val_size = 0.33 tu tak samo
-# threshold_of_cutting_sentences = [60, 55, 65]
-# learning_rate = [0.001, 0.0005]
-# output_dim = [48, 54, 58, 64, 72]
-# batch_size = [64, 128, 256]
-# random_state = 42
-# dense_layer_neurons = [32, 64]
-# optimizer = ["Adam", "AdamW"]
+LABELS = {
+    "prawo medyczne": 0,
+    "prawo pracy": 1,
+    "prawo cywilne": 2,
+    "prawo administracyjne": 3,
+    "prawo farmaceutyczne": 4,
+    "prawo karne": 5,
+}
 
 for lstm_units in [96]:
 
     # HYPERPARAMETERS FOR THIS RUN:
     hyper_parameters = {
         "is_down_sampled": False,
-        "polish_chars_removed": False,
+        "polish_chars_removed": True,
         "numbers_replaced_with_single_word": False,
-        "nr_of_epochs": 60,
+        "nr_of_epochs": 100,
         "test_val_size": 0.3,
         "val_size": 0.33,
-        "threshold_of_cutting_sentences": 70,
+        "threshold_of_cutting_sentences": 900,
         "learning_rate": 0.001,
-        "output_dim": 64,
-        "batch_size": 256,
+        "output_dim": 32,
+        "batch_size": 128,
         "random_state": 42,
-        # "dense_layer_neurons": 32,
+        "dense_layer_neurons": 64,
         "lstm_units": lstm_units,
         "optimizer": "AdamW",
     }
     print(hyper_parameters)
 
 
-    # def create_model(input_dim: str, input_length: str, num_classes: int):
+    # def create_model(input_dim: int, input_length: int, num_classes: int):
     #     model = Sequential()
     #     model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
-    #     model.add(LSTM(units=96))
+    #     model.add(Dropout(0.1))
+    #     model.add(LSTM(units=128))
     #     model.add(Dense(num_classes, activation='softmax'))
     #     return model
 
-
-    def create_model(input_dim: int, input_length: int, num_classes: int):
-        model = Sequential()
-        model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
-        model.add(Dropout(0.1))
-        model.add(LSTM(units=128))
-        model.add(Dense(num_classes, activation='softmax'))
-        return model
-
-
     def lr_schedule(epoch):
-        return hyper_parameters["learning_rate"] * 0.1 ** (epoch // 20)
+        return hyper_parameters["learning_rate"] * 0.1 ** (epoch // 30)
+
 
     lr_scheduler = LearningRateScheduler(lr_schedule)
 
-    # def create_model(input_dim: str, input_length: str, num_classes: int):
-    #     model = Sequential()
-    #     model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
-    #     # model.add(SpatialDropout1D(0.7))
-    #     # model.add(LSTM(, dropout=0.7, recurrent_dropout=0.7))
-    #     model.add(LSTM(units=128))
-    #     model.add(Dropout(0.2))
-    #     model.add(LSTM(units=64))
-    #     model.add(Dropout(0.2))
-    #     model.add(LSTM(units=32))
-    #     # model.add(GlobalMaxPooling1D())
-    #     # model.add(Dense(hyper_parameters["dense_layer_neurons"], activation='relu'))
-    #     # model.add(Dropout(0.2))
-    #     model.add(Dense(num_classes, activation='softmax'))
-    #     return model
+
+    def create_model(input_dim: str, input_length: str, num_classes: int):
+        model = Sequential()
+        model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
+        # tf.keras.layers.Conv1D(128, 5, activation='relu'),
+        model.add(GlobalMaxPooling1D())
+        model.add(Dense(64, activation='relu'))
+        # model.add(Dropout(0.2))
+        model.add(Dense(num_classes, activation='softmax'))
+        return model
 
 
     # optimzer spec
@@ -172,10 +154,10 @@ for lstm_units in [96]:
                 midpoint = len(sentences[i]) // 2
                 first_half = sentences[i][:midpoint]
                 second_half = sentences[i][midpoint:]
-                # new_sentences.append(first_half)
-                # new_categories.append(categories[i])
-                # new_sentences.append(second_half)
-                # new_categories.append(categories[i])
+                new_sentences.append(first_half)
+                new_categories.append(categories[i])
+                new_sentences.append(second_half)
+                new_categories.append(categories[i])
             else:
                 new_sentences.append(sentences[i])
                 new_categories.append(categories[i])
@@ -191,7 +173,7 @@ for lstm_units in [96]:
                 sentence = replace_polish_letters(sentence)
             if hyper_parameters["numbers_replaced_with_single_word"]:
                 sentence = replace_numbers_with_word(sentence)
-            sentence = ' '.join(sentence.split())
+            # sentence = ' '.join(sentence.split())
             sentence = remove_connecting_words(sentence)
             text[i] = sentence
         return text
@@ -232,10 +214,29 @@ for lstm_units in [96]:
         balanced_df = df
         x = balanced_df["text_full"].tolist()
         y = balanced_df["label_high"].tolist()
-        x = preprocess_sentences(text=x)
-        x, y = cut_too_long_sentences(sentences=x, categories=y,
-                                      threshold=hyper_parameters["threshold_of_cutting_sentences"])
+        # x = preprocess_sentences(text=x)
+        # x, y = cut_too_long_sentences(sentences=x, categories=y,
+        #                              threshold=hyper_parameters["threshold_of_cutting_sentences"])
         return x, y
+
+
+    def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
+        sequences = tokenizer.texts_to_sequences(sentences)
+        padded_sequences = pad_sequences(sequences)
+        # print("padded_sequences", padded_sequences)
+        # print("word index", len(tokenizer.word_index))
+        padded_sequences = np.array(padded_sequences)
+        return padded_sequences
+
+
+    def encode_labels(categories: List[str]):
+        categories_encoded = [LABELS[category] for category in categories]
+        # print("categories_encoded", categories_encoded)
+        labels = np.array(categories_encoded)
+        # print("number of classes", len(LABELS))
+        # print("input dim", len(tokenizer.word_index))
+        # print("input_length", padded_sequences.shape[1])
+        return labels
 
 
     processed_sentences, categories = get_values_from_dataset(path="dataset.csv")
@@ -262,6 +263,10 @@ for lstm_units in [96]:
 
     print(f"Sample of Y data: {categories[0]} and X data: {processed_sentences[0]}")
 
+    print("---------CLASS-WEIGHTS---------")
+    class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(categories), y=categories)
+    print("Label weights specifics", np.unique(categories), np.unique(categories), class_weights)
+
     print("-------------X-SET-------------")
     tokenizer = Tokenizer()
     tokenizer.fit_on_texts(processed_sentences)
@@ -271,34 +276,24 @@ for lstm_units in [96]:
     print("word index", len(tokenizer.word_index))
     padded_sequences = np.array(padded_sequences)
 
+    X_train_human_readable, X_temp_human_readable = train_test_split(processed_sentences,
+                                       test_size=hyper_parameters["test_val_size"])
+    X_val_human_readable, X_test_human_readable = train_test_split(X_temp_human_readable,
+                                     test_size=hyper_parameters["val_size"])
+
+    X_train, X_temp, Y_train_raw, Y_temp_raw = train_test_split(padded_sequences, categories,
+                                                                test_size=hyper_parameters["test_val_size"])
+    X_val, X_test, Y_val_raw, Y_test_raw = train_test_split(X_temp, Y_temp_raw,
+                                                            test_size=hyper_parameters["val_size"])
+
     print("-------------Y-SET-------------")
-    label_to_index = {category: idx for idx, category in enumerate(set(categories))}
-    print("label_to_index", label_to_index)
-    categories_encoded = [label_to_index[category] for category in categories]
-    print("categories_encoded", categories_encoded)
-    labels = np.array(categories_encoded)
-    print("number of classes", len(label_to_index))
-    print("input dim", len(tokenizer.word_index))
-    print("input_length", padded_sequences.shape[1])
-    print("---------CLASS-WEIGHTS---------")
-    class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(labels), y=labels)
-    print("Label weights specifics", np.unique(categories), np.unique(labels), class_weights)
-
-    X_train, X_temp, Y_train, Y_temp = train_test_split(padded_sequences, labels,
-                                                        test_size=hyper_parameters["test_val_size"],
-                                                        random_state=hyper_parameters["random_state"])
-    X_val, X_test, Y_val, Y_test = train_test_split(X_temp, Y_temp, test_size=hyper_parameters["val_size"],
-                                                    random_state=hyper_parameters["random_state"])
-
-    unique_elements, counts = np.unique(Y_val, return_counts=True)
-
-    # Display results
-    for element, count in zip(unique_elements, counts):
-        print(f"{element}: {count} occurrences")
+    Y_train = encode_labels(Y_train_raw)
+    Y_val = encode_labels(Y_val_raw)
+    Y_test = encode_labels(Y_test_raw)
 
     print("-------------MODEL-SPEC-------------")
-    model = create_model(input_dim=len(tokenizer.word_index) + 1, input_length=padded_sequences.shape[1],
-                         num_classes=len(label_to_index))
+    model = create_model(input_dim=len(tokenizer.word_index) + 1, input_length=X_train.shape[1],
+                         num_classes=len(LABELS))
 
     hyper_parameters["model_architecture"] = model.get_config()
 
@@ -306,12 +301,40 @@ for lstm_units in [96]:
                   metrics=["sparse_categorical_accuracy"])
 
     model.summary()
-
-    wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group="LSTM")
+    print(X_train.shape, Y_train.shape, X_val.shape, Y_val.shape, X_test.shape, Y_test.shape)
+    # wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group="LSTM")
     model.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=hyper_parameters["nr_of_epochs"],
               batch_size=hyper_parameters["batch_size"], class_weight=dict(enumerate(class_weights)),
-              callbacks=[EarlyStopping(monitor='val_loss', patience=100, min_delta=0.0001), lr_scheduler])
+              callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001)])
 
+    # AFTER TRAINING
     test_loss, test_accuracy = model.evaluate(X_test, Y_test)
-    wandb.log({'test_accuracy': test_accuracy})
-    wandb.finish()
+    predictions = model.predict(X_val)
+    y_pred = np.argmax(predictions, axis=1)
+
+    from sklearn.metrics import confusion_matrix
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    cm = confusion_matrix(Y_val, y_pred)
+    plt.figure(figsize=(16, 16))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=LABELS.keys(),
+                yticklabels=LABELS.keys())
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+    predictions = model.predict(X_val)
+    y_pred = np.argmax(predictions, axis=1)
+    misclassified_idx = np.where(y_pred != Y_val)[0]
+    print("label_to_index", LABELS)
+    key_list = list(LABELS.keys())
+    val_list = list(LABELS.values())
+
+    for idx in misclassified_idx[:10]:  # Display the first 5 misclassified examples
+        print(f"True label: {key_list[val_list.index(Y_val[idx])]}, Predicted label: "
+              f"{key_list[val_list.index(y_pred[idx])]}, Sentence: {X_val_human_readable[idx]}")
+
+    # wandb.log({'test_accuracy': test_accuracy})
+    # wandb.finish()
