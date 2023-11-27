@@ -277,9 +277,9 @@ for lstm_units in [96]:
     padded_sequences = np.array(padded_sequences)
 
     X_train_human_readable, X_temp_human_readable = train_test_split(processed_sentences,
-                                       test_size=hyper_parameters["test_val_size"])
+                                                                     test_size=hyper_parameters["test_val_size"])
     X_val_human_readable, X_test_human_readable = train_test_split(X_temp_human_readable,
-                                     test_size=hyper_parameters["val_size"])
+                                                                   test_size=hyper_parameters["val_size"])
 
     X_train, X_temp, Y_train_raw, Y_temp_raw = train_test_split(padded_sequences, categories,
                                                                 test_size=hyper_parameters["test_val_size"])
@@ -332,9 +332,9 @@ for lstm_units in [96]:
     key_list = list(LABELS.keys())
     val_list = list(LABELS.values())
 
-    for idx in misclassified_idx[:10]:  # Display the first 5 misclassified examples
-        print(f"True label: {key_list[val_list.index(Y_val[idx])]}, Predicted label: "
-              f"{key_list[val_list.index(y_pred[idx])]}, Sentence: {X_val_human_readable[idx]}")
+    # for idx in misclassified_idx[:10]:  # Display the first 5 misclassified examples
+    #     print(f"True label: {key_list[val_list.index(Y_val[idx])]}, Predicted label: "
+    #           f"{key_list[val_list.index(y_pred[idx])]}, Sentence: {X_val_human_readable[idx]}")
 
     # wandb.log({'test_accuracy': test_accuracy})
     # wandb.finish()
