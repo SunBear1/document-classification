@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from keras.src.callbacks import EarlyStopping, LearningRateScheduler
 from keras.src.layers import GlobalAveragePooling1D
+from keras.src.utils import to_categorical
 from numpy import ndarray, dtype
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
@@ -55,13 +56,13 @@ def program(hyper_parameters):
     def create_model(input_dim: str, input_length: str, num_classes: int):
         model = Sequential()
         model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
+        # model.add(Conv1D(128, 5, activation='relu'))
         # tf.keras.layers.Conv1D(128, 5, activation='relu'),
-        model.add(Dropout(0.2))
         model.add(GlobalAveragePooling1D())
         # model.add(Dense(24, activation='relu'))
         # model.add(Dropout(0.2))
-        # model.add(Dense(24, activation='relu'))
-        model.add(Dropout(0.2))
+        model.add(Dense(64, activation='relu'))
+        #model.add(Dropout(0.2))
         model.add(Dense(num_classes, activation='softmax'))
         return model
 
@@ -193,6 +194,10 @@ def program(hyper_parameters):
         x = preprocess_sentences(text=x)
         x, y = cut_too_long_sentences(sentences=x, categories=y,
                                       threshold=hyper_parameters["threshold_of_cutting_sentences"])
+        x, y = cut_too_long_sentences(sentences=x, categories=y,
+                                      threshold=hyper_parameters["threshold_of_cutting_sentences"]) # XD
+        x, y = cut_too_long_sentences(sentences=x, categories=y,
+                                      threshold=hyper_parameters["threshold_of_cutting_sentences"])  # XDDDD
         return x, y
 
     def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
@@ -204,13 +209,14 @@ def program(hyper_parameters):
         return padded_sequences
 
     def encode_labels(categories: List[str]):
-        categories_encoded = [LABELS[category] for category in categories]
+        #categories_encoded = [LABELS[category] for category in categories]
+        categories_encoded = to_categorical([LABELS[category] for category in categories], num_classes=len(LABELS))
         # print("categories_encoded", categories_encoded)
         labels = np.array(categories_encoded)
         # print("number of classes", len(LABELS))
         # print("input dim", len(tokenizer.word_index))
         # print("input_length", padded_sequences.shape[1])
-        return labels
+        return categories_encoded
 
     processed_sentences, categories = get_values_from_dataset(path="dataset.csv")
     print("---------------------Welcome---------------------")
@@ -270,18 +276,22 @@ def program(hyper_parameters):
 
     hyper_parameters["model_architecture"] = model.get_config()
 
-    model.compile(optimizer=optimizer, loss=losses.SparseCategoricalCrossentropy(),
-                  metrics=["sparse_categorical_accuracy"])
+    # model.compile(optimizer=optimizer, loss=losses.SparseCategoricalCrossentropy(),
+    #               metrics=["sparse_categorical_accuracy"])
+
+    print(X_train.shape, Y_train.shape, X_val.shape, Y_val.shape)
+    model.compile(optimizer=optimizer, loss=losses.CategoricalCrossentropy(),
+                  metrics=["accuracy"])
 
     model.summary()
-    print(X_train.shape, Y_train.shape, X_val.shape, Y_val.shape, X_test.shape, Y_test.shape)
     wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group="Basic")
     model.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=hyper_parameters["nr_of_epochs"],
               batch_size=hyper_parameters["batch_size"], class_weight=dict(enumerate(class_weights)),
-              callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001)])
+              callbacks=[EarlyStopping(monitor='val_loss', patience=200, min_delta=0.0001), WandbCallback()])
 
     # AFTER TRAINING
     test_loss, test_accuracy = model.evaluate(X_test, Y_test)
+    wandb.log({'test_accuracy': test_accuracy})
     predictions = model.predict(X_val)
     y_pred = np.argmax(predictions, axis=1)
 
@@ -298,12 +308,12 @@ def program(hyper_parameters):
     # plt.ylabel('True')
     # plt.show()
 
-    predictions = model.predict(X_val)
-    y_pred = np.argmax(predictions, axis=1)
-    misclassified_idx = np.where(y_pred != Y_val)[0]
-    print("label_to_index", LABELS)
-    key_list = list(LABELS.keys())
-    val_list = list(LABELS.values())
+    # predictions = model.predict(X_val)
+    # y_pred = np.argmax(predictions, axis=1)
+    # misclassified_idx = np.where(y_pred != Y_val)[0]
+    # print("label_to_index", LABELS)
+    # key_list = list(LABELS.keys())
+    # val_list = list(LABELS.values())
 
     # for idx in misclassified_idx[:10]:  # Display the first 5 misclassified examples
     #     print(f"True label: {key_list[val_list.index(Y_val[idx])]}, Predicted label: "
@@ -313,28 +323,46 @@ def program(hyper_parameters):
     wandb.finish()
 
 
-for down_sampled in [False, True]:
-    for polish_removed in [False, True]:
-        for numbers_as_word in [False, True]:
-            for threshold_for_sentences in [40, 60, 100, 900]:
-                for output_dim in [32, 64, 128]:
-                    hyper_params = {
-                        "is_down_sampled": down_sampled,
-                        "polish_chars_removed": polish_removed,
-                        "numbers_replaced_with_single_word": numbers_as_word,
-                        "nr_of_epochs": 200,
-                        "test_val_size": 0.3,
-                        "val_size": 0.33,
-                        "threshold_of_cutting_sentences": threshold_for_sentences,
-                        "learning_rate": 0.001,
-                        "output_dim": output_dim,
-                        "batch_size": 128,
-                        "random_state": 42,
-                        "dense_layer_neurons": 64,
-                        # "lstm_units": lstm_units,
-                        "optimizer": "AdamW",
-                    }
-                    program(hyper_params)
+hyper_params = {
+    "is_down_sampled": False,
+    "polish_chars_removed": False,
+    "numbers_replaced_with_single_word": False,
+    "nr_of_epochs": 80,
+    "test_val_size": 0.3,
+    "val_size": 0.33,
+    "threshold_of_cutting_sentences": 25,
+    "learning_rate": 0.001,
+    "output_dim": 64,
+    "batch_size": 128,
+    "random_state": 42,
+    "dense_layer_neurons": 48,
+    # "lstm_units": lstm_units,
+    "optimizer": "AdamW",
+}
+program(hyper_params)
+
+# for down_sampled in [False, True]:
+#     for polish_removed in [False, True]:
+#         for numbers_as_word in [False, True]:
+#             for threshold_for_sentences in [40, 60, 100, 900]:
+#                 for output_dim in [32, 64, 128]:
+#                     hyper_params = {
+#                         "is_down_sampled": down_sampled,
+#                         "polish_chars_removed": polish_removed,
+#                         "numbers_replaced_with_single_word": numbers_as_word,
+#                         "nr_of_epochs": 200,
+#                         "test_val_size": 0.3,
+#                         "val_size": 0.33,
+#                         "threshold_of_cutting_sentences": threshold_for_sentences,
+#                         "learning_rate": 0.001,
+#                         "output_dim": output_dim,
+#                         "batch_size": 128,
+#                         "random_state": 42,
+#                         "dense_layer_neurons": 64,
+#                         # "lstm_units": lstm_units,
+#                         "optimizer": "AdamW",
+#                     }
+#                     program(hyper_params)
 
 # print(hyper_params["is_down_sampled"])
 # hyper_params["is_down_sampled"] = True
