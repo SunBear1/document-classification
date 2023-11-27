@@ -7,6 +7,7 @@ import random
 import numpy as np
 import pandas as pd
 from keras.src.callbacks import EarlyStopping, LearningRateScheduler
+from keras.src.layers import GlobalAveragePooling1D
 from numpy import ndarray, dtype
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
@@ -22,7 +23,7 @@ from keras.layers import Embedding, Flatten, Dense, Conv1D, MaxPooling1D, Global
     Activation, SpatialDropout1D
 from wandb.keras import WandbCallback
 
-# wandb.login()
+wandb.login()
 
 LABELS = {
     "prawo medyczne": 0,
@@ -33,27 +34,10 @@ LABELS = {
     "prawo karne": 5,
 }
 
-for lstm_units in [96]:
 
+def program(hyper_parameters):
     # HYPERPARAMETERS FOR THIS RUN:
-    hyper_parameters = {
-        "is_down_sampled": False,
-        "polish_chars_removed": True,
-        "numbers_replaced_with_single_word": False,
-        "nr_of_epochs": 100,
-        "test_val_size": 0.3,
-        "val_size": 0.33,
-        "threshold_of_cutting_sentences": 900,
-        "learning_rate": 0.001,
-        "output_dim": 32,
-        "batch_size": 128,
-        "random_state": 42,
-        "dense_layer_neurons": 64,
-        "lstm_units": lstm_units,
-        "optimizer": "AdamW",
-    }
     print(hyper_parameters)
-
 
     # def create_model(input_dim: int, input_length: int, num_classes: int):
     #     model = Sequential()
@@ -66,20 +50,20 @@ for lstm_units in [96]:
     def lr_schedule(epoch):
         return hyper_parameters["learning_rate"] * 0.1 ** (epoch // 30)
 
-
     lr_scheduler = LearningRateScheduler(lr_schedule)
-
 
     def create_model(input_dim: str, input_length: str, num_classes: int):
         model = Sequential()
         model.add(Embedding(input_dim=input_dim, output_dim=hyper_parameters["output_dim"], input_length=input_length))
         # tf.keras.layers.Conv1D(128, 5, activation='relu'),
-        model.add(GlobalMaxPooling1D())
-        model.add(Dense(64, activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(GlobalAveragePooling1D())
+        # model.add(Dense(24, activation='relu'))
         # model.add(Dropout(0.2))
+        # model.add(Dense(24, activation='relu'))
+        model.add(Dropout(0.2))
         model.add(Dense(num_classes, activation='softmax'))
         return model
-
 
     # optimzer spec
     if hyper_parameters["optimizer"] == "AdamW":
@@ -119,7 +103,6 @@ for lstm_units in [96]:
     with open("connecting_words.lst", "r") as f:
         CONNECTING_WORDS = f.read().splitlines()
 
-
     def downsample_dataset(dataframe: DataFrame, desired_count: int) -> DataFrame:
         category_counts = dataframe['label_high'].value_counts()
         balanced_df = pd.DataFrame(columns=dataframe.columns)
@@ -134,7 +117,6 @@ for lstm_units in [96]:
             balanced_df = pd.concat([balanced_df, sampled_data], ignore_index=True)
         return balanced_df
 
-
     def filter_dataset(dataframe: DataFrame) -> DataFrame:
         category_filter = dataframe[(dataframe['label_high'] == "tu interpolska") |
                                     (dataframe['label_high'] == "odpowiedzi niestandardowe") |
@@ -143,7 +125,6 @@ for lstm_units in [96]:
                                     (dataframe['label_high'] == "prawo miädzynarodowe")].index
         dataframe.drop(category_filter, inplace=True)
         return dataframe
-
 
     def cut_too_long_sentences(sentences: List[str], categories: List[str], threshold: int):
         new_sentences = []
@@ -163,7 +144,6 @@ for lstm_units in [96]:
                 new_categories.append(categories[i])
         return new_sentences, new_categories
 
-
     def preprocess_sentences(text: List[str]):
         for i in range(len(text)):
             sentence = text[i]
@@ -178,20 +158,17 @@ for lstm_units in [96]:
             text[i] = sentence
         return text
 
-
     def remove_connecting_words(text):
         text = text.split()
         text = [word for word in text if word not in CONNECTING_WORDS]
         text = ' '.join(text)
         return text
 
-
     def replace_numbers_with_word(sentence) -> str:
         pattern = r'\d+'
         replaced_sentence = re.sub(pattern, 'number', sentence)
 
         return replaced_sentence
-
 
     def replace_polish_letters(input: str) -> str:
         polish_to_latin = {
@@ -204,7 +181,6 @@ for lstm_units in [96]:
             input = input.replace(polish, latin)
         return input
 
-
     def get_values_from_dataset(path: str) -> Tuple[List[str], List[str]]:
         df = pd.read_csv(path, sep=";")
         df = df.dropna()
@@ -214,11 +190,10 @@ for lstm_units in [96]:
         balanced_df = df
         x = balanced_df["text_full"].tolist()
         y = balanced_df["label_high"].tolist()
-        # x = preprocess_sentences(text=x)
-        # x, y = cut_too_long_sentences(sentences=x, categories=y,
-        #                              threshold=hyper_parameters["threshold_of_cutting_sentences"])
+        x = preprocess_sentences(text=x)
+        x, y = cut_too_long_sentences(sentences=x, categories=y,
+                                      threshold=hyper_parameters["threshold_of_cutting_sentences"])
         return x, y
-
 
     def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
         sequences = tokenizer.texts_to_sequences(sentences)
@@ -228,7 +203,6 @@ for lstm_units in [96]:
         padded_sequences = np.array(padded_sequences)
         return padded_sequences
 
-
     def encode_labels(categories: List[str]):
         categories_encoded = [LABELS[category] for category in categories]
         # print("categories_encoded", categories_encoded)
@@ -237,7 +211,6 @@ for lstm_units in [96]:
         # print("input dim", len(tokenizer.word_index))
         # print("input_length", padded_sequences.shape[1])
         return labels
-
 
     processed_sentences, categories = get_values_from_dataset(path="dataset.csv")
     print("---------------------Welcome---------------------")
@@ -302,7 +275,7 @@ for lstm_units in [96]:
 
     model.summary()
     print(X_train.shape, Y_train.shape, X_val.shape, Y_val.shape, X_test.shape, Y_test.shape)
-    # wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group="LSTM")
+    wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group="Basic")
     model.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=hyper_parameters["nr_of_epochs"],
               batch_size=hyper_parameters["batch_size"], class_weight=dict(enumerate(class_weights)),
               callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001)])
@@ -316,14 +289,14 @@ for lstm_units in [96]:
     import seaborn as sns
     import matplotlib.pyplot as plt
 
-    cm = confusion_matrix(Y_val, y_pred)
-    plt.figure(figsize=(16, 16))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=LABELS.keys(),
-                yticklabels=LABELS.keys())
-    plt.title('Confusion Matrix')
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.show()
+    # cm = confusion_matrix(Y_val, y_pred)
+    # plt.figure(figsize=(16, 16))
+    # sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=LABELS.keys(),
+    #             yticklabels=LABELS.keys())
+    # plt.title('Confusion Matrix')
+    # plt.xlabel('Predicted')
+    # plt.ylabel('True')
+    # plt.show()
 
     predictions = model.predict(X_val)
     y_pred = np.argmax(predictions, axis=1)
@@ -336,5 +309,33 @@ for lstm_units in [96]:
     #     print(f"True label: {key_list[val_list.index(Y_val[idx])]}, Predicted label: "
     #           f"{key_list[val_list.index(y_pred[idx])]}, Sentence: {X_val_human_readable[idx]}")
 
-    # wandb.log({'test_accuracy': test_accuracy})
-    # wandb.finish()
+    wandb.log({'test_accuracy': test_accuracy})
+    wandb.finish()
+
+
+for down_sampled in [False, True]:
+    for polish_removed in [False, True]:
+        for numbers_as_word in [False, True]:
+            for threshold_for_sentences in [40, 60, 100, 900]:
+                for output_dim in [32, 64, 128]:
+                    hyper_params = {
+                        "is_down_sampled": down_sampled,
+                        "polish_chars_removed": polish_removed,
+                        "numbers_replaced_with_single_word": numbers_as_word,
+                        "nr_of_epochs": 200,
+                        "test_val_size": 0.3,
+                        "val_size": 0.33,
+                        "threshold_of_cutting_sentences": threshold_for_sentences,
+                        "learning_rate": 0.001,
+                        "output_dim": output_dim,
+                        "batch_size": 128,
+                        "random_state": 42,
+                        "dense_layer_neurons": 64,
+                        # "lstm_units": lstm_units,
+                        "optimizer": "AdamW",
+                    }
+                    program(hyper_params)
+
+# print(hyper_params["is_down_sampled"])
+# hyper_params["is_down_sampled"] = True
+# print(hyper_params["is_down_sampled"])
