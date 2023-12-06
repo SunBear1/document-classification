@@ -31,56 +31,30 @@ def filter_dataset(dataframe: DataFrame) -> DataFrame:
                                 (dataframe['label_high'] == "prawo konstytucyjne") |
                                 (dataframe['label_high'] == "prawo miädzynarodowe")].index
     dataframe.drop(category_filter, inplace=True)
-    # dataframe.drop(['categories', 'text_full', 'lp'], axis=1, inplace=True)
     return dataframe
-
-
-# def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
-#     sequences = tokenizer.texts_to_sequences(sentences)
-#     padded_sequences = pad_sequences(sequences)
-#     padded_sequences = np.array(padded_sequences)
-#     return padded_sequences
 
 
 def encode_labels(categories: List[str], labels: Dict):
     return to_categorical([labels[category] for category in categories], num_classes=len(labels))
 
 
-def cut_too_long_sentences(sentences: List[str], main_categories: List[str], sub_categories: List[str], threshold: int):
-    while True:  # TODO pętla nieskończona - czacha
-        max_sen_word_count = 0
-        for sentence in sentences:
-            words = len(sentence.split())
-            if words > max_sen_word_count:
-                max_sen_word_count = words
-
-        if max_sen_word_count <= threshold:
-            break
-
-        new_sentences = []
-        new_main_categories = []
-        new_sub_categories = []
-        for i in range(len(sentences)):
-            words_count = len(sentences[i].split())
-            if words_count > threshold:
-                midpoint = len(sentences[i]) // 2  # TODO ucinanie w środku słów - giga gówno
-                first_half = sentences[i][:midpoint]
-                second_half = sentences[i][midpoint:]
-
-                new_sentences.append(first_half)
-                new_main_categories.append(main_categories[i])
-                new_sub_categories.append(sub_categories[i])
-
-                new_sentences.append(second_half)
-                new_main_categories.append(main_categories[i])
-                new_sub_categories.append(sub_categories[i])
-
-            else:
-                new_sentences.append(sentences[i])
-                new_main_categories.append(main_categories[i])
-                new_sub_categories.append(sub_categories[i])
-        sentences = new_sentences
-    return new_sentences, new_main_categories, new_sub_categories
+def split_too_long_sentences(sentences: List[str], categories: List[str], threshold: int):
+    new_sentences = []
+    new_categories = []
+    for i in range(len(sentences)):
+        if len(sentences[i].split()) > threshold:
+            words = sentences[i].split()
+            half = len(words) // 2
+            first_half = ' '.join(words[:half])
+            second_half = ' '.join(words[half:])
+            new_sentences.append(first_half)
+            new_categories.append(categories[i])
+            new_sentences.append(second_half)
+            new_categories.append(categories[i])
+        else:
+            new_sentences.append(sentences[i])
+            new_categories.append(categories[i])
+    return new_sentences, new_categories
 
 
 def remove_connecting_words(text, connecting_words: List[str]):
@@ -92,24 +66,12 @@ def remove_connecting_words(text, connecting_words: List[str]):
 
 def replace_numbers_with_word(sentence) -> str:
     pattern = r'\d+'
-    replaced_sentence = re.sub(pattern, 'number', sentence)
+    replaced_sentence = re.sub(pattern, 'liczba', sentence)
     return replaced_sentence
 
 
-def replace_polish_letters(input: str) -> str:
-    polish_to_latin = {
-        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n',
-        'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z', 'Ą': 'A',
-        'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O',
-        'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
-    }
-    for polish, latin in polish_to_latin.items():
-        input = input.replace(polish, latin)
-    return input
-
-
 def tokenize_sentences(sentences: List[str]):  # TODO czy tutaj można dospermić? chyba tak
-    nlp = spacy.load('pl_core_news_md')
+    nlp = spacy.load('pl_core_news_lg')
     tokenized_data = [[token.lemma_ for token in nlp(sentence)] for sentence in sentences]
     vocabulary = {word: idx for idx, word in enumerate(set(word for sentence in tokenized_data for word in sentence))}
     indexed_data = [[vocabulary[word] for word in sentence] for sentence in tokenized_data]

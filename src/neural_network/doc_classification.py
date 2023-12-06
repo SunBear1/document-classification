@@ -20,8 +20,8 @@ from keras.layers import Embedding, Flatten, Dense, Conv1D, MaxPooling1D, Global
     Activation, SpatialDropout1D
 from wandb.keras import WandbCallback
 
-from src.neural_network.processing import downsample_dataset, filter_dataset, cut_too_long_sentences, \
-    replace_polish_letters, replace_numbers_with_word, remove_connecting_words, tokenize_sentences, encode_labels
+from src.neural_network.processing import downsample_dataset, filter_dataset, \
+    replace_numbers_with_word, remove_connecting_words, tokenize_sentences, encode_labels, split_too_long_sentences
 
 # wandb.login()
 
@@ -64,29 +64,23 @@ def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[A
     if hyper_parameters["is_down_sampled"]:
         df = downsample_dataset(df, 225)
 
-    # TODO wywalenie powtórek, dodanie ewentualnie nowej kolumny do labelek, wywalić zdania które są skaftem
-    # TODO Zaciąganie kolumny text zamiast text_full i rozdział zdań na mniejsze. Ref multi_label_network.py
+    df = df.drop_duplicates(subset=["text_full", "label_high"], keep=False)
 
     sentences = df["text_full"].tolist()
     categories = df["label_high"].tolist()
-    # sentences, main_categories, sub_categories = cut_too_long_sentences(sentences=sentences, # TODO fix this
-    #                                                                     main_categories=main_categories,
-    #                                                                     sub_categories=sub_categories,
-    #                                                                     threshold=hyper_parameters[
-    #                                                                         "threshold_of_cutting_sentences"])
+    sentences, categories = split_too_long_sentences(sentences=sentences,
+                                                     categories=categories,
+                                                     threshold=hyper_parameters[
+                                                         "threshold_of_cutting_sentences"])
 
     for i in range(len(sentences)):
         sentence = sentences[i]
-
         sentence = sentence.lower()
-        sentence = re.sub(r'[^a-zA-Ząćęłńóśźż\s]', '', sentence)
-        if hyper_parameters["polish_chars_removed"]:
-            sentence = replace_polish_letters(sentence)
         if hyper_parameters["numbers_replaced_with_single_word"]:
             sentence = replace_numbers_with_word(sentence)
+        sentence = re.sub(r'[^a-zA-Ząćęłńóśźż\s]', '', sentence)
         sentence = ' '.join(sentence.split())  # TODO  questionable
         sentence = remove_connecting_words(sentence, connecting_words)
-
         sentences[i] = sentence
 
     sentence_lengths = []
@@ -147,9 +141,11 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
 
     x_train, x_temp, y_train, y_temp = train_test_split(main_padded_sequences,
                                                         categories,
+                                                        stratify=categories,
                                                         test_size=hyper_parameters[
                                                             "test_val_size"])
     x_val, x_test, y_val, y_test = train_test_split(x_temp, y_temp,
+                                                    stratify=y_temp,
                                                     test_size=hyper_parameters["val_size"])
 
     print("-------------Y-SET-------------")
@@ -188,6 +184,7 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
                                        #                     output_type="auto"
                                        ), lr_scheduler])
     test_loss, test_accuracy = model.evaluate(x_test, y_test)
+    print("Test accuracy", test_accuracy)
     # wandb.log({'test_accuracy': test_accuracy})
     # wandb.finish()
 
@@ -221,31 +218,32 @@ def create_model(input_dim: int, input_length: int, num_classes: int, output_dim
     model = Sequential()  # to jest zawsze
     model.add(Embedding(input_dim=input_dim, output_dim=output_dim, input_length=input_length))  # to jest zawsze
     model.add(GlobalMaxPooling1D())  # tutaj potrzebne jest coś to zmieni wymiar z 3D na 2D
-    #model.add(Dropout(0.1))  # element do dospermiania
-    model.add(Dense(32, activation="relu"))  # element do dospermiania
-    #model.add(Dropout(0.1))  # element do dospermiania
+    # model.add(Dropout(0.1))  # element do dospermiania
+    model.add(Dense(64, activation="relu"))  # element do dospermiania
+    # model.add(Dropout(0.1))  # element do dospermiania
     model.add(Dense(num_classes, activation='softmax'))  # to jest zawsze
     return model
 
 
 hyper_params = {
-    "is_down_sampled": False,
-    "polish_chars_removed": False,
-    "numbers_replaced_with_single_word": False,
-    "nr_of_epochs": 100,
+    "is_down_sampled": False,  # solid
+    "polish_chars_removed": False,  # solid
+    "numbers_replaced_with_single_word": True,  # solid
+    "nr_of_epochs": 40,
     "test_val_size": 0.3,
     "val_size": 0.33,
-    "threshold_of_cutting_sentences": 25,
+    "threshold_of_cutting_sentences": 1000,  # disabled
     "learning_rate": 0.001,
     "output_dim": 64,  # TODO to można dospermić
-    "batch_size": 128,
+    "batch_size": 128,  # solid
     "model_config": create_model,
     "optimizer": "AdamW",
-    "scheduler_threshold": 30,  # jak chcesz go wyłączyć to daj wielką liczbe
+    "scheduler_threshold": 100,  # do pokombinowania
     "loss": "categorical_crossentropy",  # TODO sprawdzić inne lossy jak np sparse_categorical_crossentropy
     "metrics": ["accuracy"],  # TODO sprawdzić inne metryki jak np sparse_categorical_accuracy albo categorical_accuracy
     "post_training_info": False,
     "wandb_group": "LSTM"  # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
 }
 
-solve_the_document_classification_problem(hyper_parameters=hyper_params, wandb_group="LSTM")
+# TODO STRATYFIKACJA
+solve_the_document_classification_problem(hyper_parameters=hyper_params, wandb_group="Dense")
