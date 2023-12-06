@@ -76,11 +76,11 @@ def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[A
     for i in range(len(sentences)):
         sentence = sentences[i]
         sentence = sentence.lower()
+        sentence = re.sub(r'[^a-zA-Ząćęłńóśźż0-9\s]', '', sentence)
         if hyper_parameters["numbers_replaced_with_single_word"]:
             sentence = replace_numbers_with_word(sentence)
-        sentence = re.sub(r'[^a-zA-Ząćęłńóśźż\s]', '', sentence)
-        sentence = ' '.join(sentence.split())  # TODO  questionable
         sentence = remove_connecting_words(sentence, connecting_words)
+        sentence = ' '.join(sentence.split())
         sentences[i] = sentence
 
     sentence_lengths = []
@@ -100,7 +100,7 @@ def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[A
     print("Average words for sentence", statistics.mean(sentence_lengths))
     print("Median of words for sentence", statistics.median(sorted(sentence_lengths)))
     print("Dataset sample:")
-    for _ in range(10):
+    for _ in range(30):
         i = np.random.randint(0, len(sentences))
         print(f"Main category: {categories[i]},  Sentence: {sentences[i]}")
 
@@ -118,7 +118,7 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
         print('Found GPU at: {}'.format(device_name))
 
     # download_dataset() # jeśli chcesz żeby ciągnął z neta to odkomentuj
-    with open(CONNECTING_WORDS_FILE_PATH, "r") as f:
+    with open(CONNECTING_WORDS_FILE_PATH, "r", encoding="utf-8") as f:
         connecting_words = f.read().splitlines()
 
     print("-----------------------WELCOME-----------------------")
@@ -217,9 +217,18 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
 def create_model(input_dim: int, input_length: int, num_classes: int, output_dim: int):
     model = Sequential()  # to jest zawsze
     model.add(Embedding(input_dim=input_dim, output_dim=output_dim, input_length=input_length))  # to jest zawsze
+    # model.add(LSTM(128, activation="relu", return_sequences=True))
+    # model.add(Dropout(0.2))
+    # model.add(LSTM(128, activation="relu"))
+    # model.add(Dropout(0.2))
+    # model.add(Dense(32, activation="relu"))
+    # model.add(Dropout(0.2))
+
     model.add(GlobalMaxPooling1D())  # tutaj potrzebne jest coś to zmieni wymiar z 3D na 2D
+    # model.add(SpatialDropout1D(0.1))
     # model.add(Dropout(0.1))  # element do dospermiania
     model.add(Dense(64, activation="relu"))  # element do dospermiania
+    # model.add(LSTM(64))
     # model.add(Dropout(0.1))  # element do dospermiania
     model.add(Dense(num_classes, activation='softmax'))  # to jest zawsze
     return model
@@ -229,7 +238,7 @@ hyper_params = {
     "is_down_sampled": False,  # solid
     "polish_chars_removed": False,  # solid
     "numbers_replaced_with_single_word": True,  # solid
-    "nr_of_epochs": 40,
+    "nr_of_epochs": 60,
     "test_val_size": 0.3,
     "val_size": 0.33,
     "threshold_of_cutting_sentences": 1000,  # disabled
@@ -237,11 +246,11 @@ hyper_params = {
     "output_dim": 64,  # TODO to można dospermić
     "batch_size": 128,  # solid
     "model_config": create_model,
-    "optimizer": "AdamW",
+    "optimizer": "Adam",
     "scheduler_threshold": 100,  # do pokombinowania
-    "loss": "categorical_crossentropy",  # TODO sprawdzić inne lossy jak np sparse_categorical_crossentropy
+    "loss": "sparse_categorical_crossentropy",  # TODO sprawdzić inne lossy jak np sparse_categorical_crossentropy
     "metrics": ["accuracy"],  # TODO sprawdzić inne metryki jak np sparse_categorical_accuracy albo categorical_accuracy
-    "post_training_info": False,
+    "post_training_info": True,
     "wandb_group": "LSTM"  # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
 }
 

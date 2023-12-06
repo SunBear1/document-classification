@@ -8,6 +8,8 @@ from pandas import DataFrame
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 
+NLP = spacy.load('pl_core_news_lg')
+
 
 def downsample_dataset(dataframe: DataFrame, desired_count: int) -> DataFrame:
     category_counts = dataframe['label_high'].value_counts()
@@ -35,7 +37,7 @@ def filter_dataset(dataframe: DataFrame) -> DataFrame:
 
 
 def encode_labels(categories: List[str], labels: Dict):
-    return to_categorical([labels[category] for category in categories], num_classes=len(labels))
+    return np.array([labels[category] for category in categories])
 
 
 def split_too_long_sentences(sentences: List[str], categories: List[str], threshold: int):
@@ -71,8 +73,7 @@ def replace_numbers_with_word(sentence) -> str:
 
 
 def tokenize_sentences(sentences: List[str]):  # TODO czy tutaj można dospermić? chyba tak
-    nlp = spacy.load('pl_core_news_lg')
-    tokenized_data = [[token.lemma_ for token in nlp(sentence)] for sentence in sentences]
+    tokenized_data = [[token.lemma_ for token in NLP(sentence)] for sentence in sentences]
     vocabulary = {word: idx for idx, word in enumerate(set(word for sentence in tokenized_data for word in sentence))}
     indexed_data = [[vocabulary[word] for word in sentence] for sentence in tokenized_data]
     padded_sequences = pad_sequences(indexed_data)
