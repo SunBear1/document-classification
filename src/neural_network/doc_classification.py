@@ -23,12 +23,12 @@ from wandb.keras import WandbCallback
 from src.neural_network.processing import downsample_dataset, filter_dataset, cut_too_long_sentences, \
     replace_polish_letters, replace_numbers_with_word, remove_connecting_words, tokenize_sentences, encode_labels
 
-wandb.login()
+# wandb.login()
 
 DATASET_FILE_URL = "https://raw.githubusercontent.com/SunBear1/document-classification/master/data/complete_dataset.csv"
 CONNECTING_WORDS_FILE_URL = "https://raw.githubusercontent.com/SunBear1/document-classification/master/data/connecting_words.lst"
-DATASET_FILE_PATH = "dataset_complete.csv"
-CONNECTING_WORDS_FILE_PATH = "connecting_words.lst"
+DATASET_FILE_PATH = "../../data/complete_dataset.csv"
+CONNECTING_WORDS_FILE_PATH = "../../data/connecting_words.lst"
 LABELS = {
     "prawo medyczne": 0,
     "prawo pracy": 1,
@@ -57,7 +57,7 @@ def download_dataset():
         print(f"Failed to download the file. Status code: {response.status_code}")
 
 
-def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> tuple[Any, Any]:
+def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[Any, Any]:
     df = pd.read_csv(DATASET_FILE_PATH, sep=",")
     df = df.dropna()
     df = filter_dataset(df)
@@ -177,17 +177,19 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
                   metrics=hyper_parameters["metrics"])
 
     model.summary()
-    wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group=wandb_group)
+    # wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group=wandb_group)
     model.fit(x_train, y_train, validation_data=(x_val, y_val), epochs=hyper_parameters["nr_of_epochs"],
               batch_size=hyper_parameters["batch_size"], class_weight=dict(enumerate(class_weights)),
-              callbacks=[EarlyStopping(monitor='val_loss', patience=200, min_delta=0.0001),
-                         WandbCallback(save_model=False, log_weights=True,
-                                       labels=LABELS.keys(), input_type="auto",
-                                       output_type="auto"
+              callbacks=[EarlyStopping(monitor='val_loss', patience=200, min_delta=0.0001
+                                       # )
+                                       # ,
+                                       #       WandbCallback(save_model=False, log_weights=True,
+                                       #                     labels=LABELS.keys(), input_type="auto",
+                                       #                     output_type="auto"
                                        ), lr_scheduler])
     test_loss, test_accuracy = model.evaluate(x_test, y_test)
-    wandb.log({'test_accuracy': test_accuracy})
-    wandb.finish()
+    # wandb.log({'test_accuracy': test_accuracy})
+    # wandb.finish()
 
     # AFTER TRAINING
     if hyper_parameters["post_training_info"]:
@@ -235,15 +237,15 @@ hyper_params = {
     "val_size": 0.33,
     "threshold_of_cutting_sentences": 25,
     "learning_rate": 0.001,
-    "output_dim": 64, # TODO to można dospermić
+    "output_dim": 64,  # TODO to można dospermić
     "batch_size": 128,
     "model_config": create_model,
     "optimizer": "AdamW",
-    "scheduler_threshold": 30, # jak chcesz go wyłączyć to daj wielką liczbe
+    "scheduler_threshold": 30,  # jak chcesz go wyłączyć to daj wielką liczbe
     "loss": "categorical_crossentropy",  # TODO sprawdzić inne lossy jak np sparse_categorical_crossentropy
     "metrics": ["accuracy"],  # TODO sprawdzić inne metryki jak np sparse_categorical_accuracy albo categorical_accuracy
     "post_training_info": False,
-    "wandb_group": "LSTM" # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
+    "wandb_group": "LSTM"  # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
 }
 
 solve_the_document_classification_problem(hyper_parameters=hyper_params, wandb_group="LSTM")
