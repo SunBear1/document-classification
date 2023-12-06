@@ -221,9 +221,9 @@ def create_model(input_dim: int, input_length: int, num_classes: int, output_dim
     model = Sequential()  # to jest zawsze
     model.add(Embedding(input_dim=input_dim, output_dim=output_dim, input_length=input_length))  # to jest zawsze
     model.add(GlobalMaxPooling1D())  # tutaj potrzebne jest coś to zmieni wymiar z 3D na 2D
-    model.add(Dropout(0.1))  # element do dospermiania
-    model.add(Dense(32))  # element do dospermiania
-    model.add(Dropout(0.1))  # element do dospermiania
+    #model.add(Dropout(0.1))  # element do dospermiania
+    model.add(Dense(32, activation="relu"))  # element do dospermiania
+    #model.add(Dropout(0.1))  # element do dospermiania
     model.add(Dense(num_classes, activation='softmax'))  # to jest zawsze
     return model
 
@@ -232,7 +232,7 @@ hyper_params = {
     "is_down_sampled": False,
     "polish_chars_removed": False,
     "numbers_replaced_with_single_word": False,
-    "nr_of_epochs": 30,
+    "nr_of_epochs": 100,
     "test_val_size": 0.3,
     "val_size": 0.33,
     "threshold_of_cutting_sentences": 25,

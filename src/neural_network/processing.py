@@ -35,11 +35,11 @@ def filter_dataset(dataframe: DataFrame) -> DataFrame:
     return dataframe
 
 
-def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
-    sequences = tokenizer.texts_to_sequences(sentences)
-    padded_sequences = pad_sequences(sequences)
-    padded_sequences = np.array(padded_sequences)
-    return padded_sequences
+# def tokenize_sentences(sentences: List[str], tokenizer: Tokenizer = None):
+#     sequences = tokenizer.texts_to_sequences(sentences)
+#     padded_sequences = pad_sequences(sequences)
+#     padded_sequences = np.array(padded_sequences)
+#     return padded_sequences
 
 
 def encode_labels(categories: List[str], labels: Dict):
@@ -109,17 +109,6 @@ def replace_polish_letters(input: str) -> str:
 
 
 def tokenize_sentences(sentences: List[str]):  # TODO czy tutaj można dospermić? chyba tak
-    # tokenizer = Tokenizer()
-    # tokenizer.fit_on_texts(sentences)
-    # sequences = tokenizer.texts_to_sequences(sentences)
-    # padded_sequences = pad_sequences(sequences)
-    # padded_sequences = np.array(padded_sequences)
-    #
-    # print("padded_sequences", padded_sequences)
-    # print("word index", len(tokenizer.word_index))  # ile jest słów w słowniku
-    #
-    # return padded_sequences, tokenizer.word_index
-
     nlp = spacy.load('pl_core_news_md')
     tokenized_data = [[token.lemma_ for token in nlp(sentence)] for sentence in sentences]
     vocabulary = {word: idx for idx, word in enumerate(set(word for sentence in tokenized_data for word in sentence))}
