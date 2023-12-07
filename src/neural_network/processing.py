@@ -31,13 +31,16 @@ def filter_dataset(dataframe: DataFrame) -> DataFrame:
                                 (dataframe['label_high'] == "odpowiedzi niestandardowe") |
                                 (dataframe['label_high'] == "prawo podatkowe") |
                                 (dataframe['label_high'] == "prawo konstytucyjne") |
-                                (dataframe['label_high'] == "prawo miädzynarodowe")].index
+                                (dataframe['label_high'] == "prawo miädzynarodowe") |
+                                (dataframe['quality'] == -1)
+                                ].index
     dataframe.drop(category_filter, inplace=True)
     return dataframe
 
 
 def encode_labels(categories: List[str], labels: Dict):
     return np.array([labels[category] for category in categories])
+    #return to_categorical([labels[category] for category in categories], num_classes=len(labels))
 
 
 def split_too_long_sentences(sentences: List[str], categories: List[str], threshold: int):

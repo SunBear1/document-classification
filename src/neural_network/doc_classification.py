@@ -6,6 +6,7 @@ import statistics
 import pprint
 import numpy as np
 import pandas as pd
+from keras.src.layers import Bidirectional
 from tensorflow.keras.models import Model
 from keras.src.callbacks import EarlyStopping, LearningRateScheduler
 from sklearn.model_selection import train_test_split
@@ -20,14 +21,15 @@ from keras.layers import Embedding, Flatten, Dense, Conv1D, MaxPooling1D, Global
     Activation, SpatialDropout1D
 from wandb.keras import WandbCallback
 
+from src.neural_network.bert import build_bert_model
 from src.neural_network.processing import downsample_dataset, filter_dataset, \
     replace_numbers_with_word, remove_connecting_words, tokenize_sentences, encode_labels, split_too_long_sentences
 
-# wandb.login()
+wandb.login()
 
 DATASET_FILE_URL = "https://raw.githubusercontent.com/SunBear1/document-classification/master/data/complete_dataset.csv"
 CONNECTING_WORDS_FILE_URL = "https://raw.githubusercontent.com/SunBear1/document-classification/master/data/connecting_words.lst"
-DATASET_FILE_PATH = "../../data/complete_dataset.csv"
+DATASET_FILE_PATH = "../../data/reviewed_dataset.csv"
 CONNECTING_WORDS_FILE_PATH = "../../data/connecting_words.lst"
 LABELS = {
     "prawo medyczne": 0,
@@ -58,7 +60,7 @@ def download_dataset():
 
 
 def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[Any, Any]:
-    df = pd.read_csv(DATASET_FILE_PATH, sep=",")
+    df = pd.read_csv(DATASET_FILE_PATH, sep=";")
     df = df.dropna()
     df = filter_dataset(df)
     if hyper_parameters["is_down_sampled"]:
@@ -100,14 +102,14 @@ def prepare_data(hyper_parameters: Dict, connecting_words: List[str]) -> Tuple[A
     print("Average words for sentence", statistics.mean(sentence_lengths))
     print("Median of words for sentence", statistics.median(sorted(sentence_lengths)))
     print("Dataset sample:")
-    for _ in range(30):
+    for _ in range(10):
         i = np.random.randint(0, len(sentences))
         print(f"Main category: {categories[i]},  Sentence: {sentences[i]}")
 
     return sentences, categories
 
 
-def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_group: str):
+def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_group: str, wandb_name: str):
     print("---------------------PREPARING-ENVIRONMENT---------------------")
     pprint.pprint(hyper_parameters)
 
@@ -142,10 +144,12 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
     x_train, x_temp, y_train, y_temp = train_test_split(main_padded_sequences,
                                                         categories,
                                                         stratify=categories,
+                                                        #  shuffle=False,
                                                         test_size=hyper_parameters[
                                                             "test_val_size"])
     x_val, x_test, y_val, y_test = train_test_split(x_temp, y_temp,
                                                     stratify=y_temp,
+                                                    # shuffle=False,
                                                     test_size=hyper_parameters["val_size"])
 
     print("-------------Y-SET-------------")
@@ -154,8 +158,10 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
     y_test = encode_labels(y_test, LABELS)
 
     print("-------------MODEL-SPEC-------------")
+    #model = build_bert_model()
+
     model = create_model(input_dim=len(word_index) + 1, input_length=x_train.shape[1],
-                         num_classes=len(LABELS), output_dim=hyper_parameters["output_dim"])  # TODO co robi output dim?
+                         num_classes=len(LABELS), output_dim=hyper_parameters["output_dim"])
 
     hyper_parameters["model_architecture"] = model.get_config()
 
@@ -173,34 +179,32 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
                   metrics=hyper_parameters["metrics"])
 
     model.summary()
-    # wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group=wandb_group)
+    wandb.init(project="IUI&PUG", entity="gourmet", config=hyper_parameters, group=wandb_group)
     model.fit(x_train, y_train, validation_data=(x_val, y_val), epochs=hyper_parameters["nr_of_epochs"],
               batch_size=hyper_parameters["batch_size"], class_weight=dict(enumerate(class_weights)),
-              callbacks=[EarlyStopping(monitor='val_loss', patience=200, min_delta=0.0001
-                                       # )
-                                       # ,
-                                       #       WandbCallback(save_model=False, log_weights=True,
-                                       #                     labels=LABELS.keys(), input_type="auto",
-                                       #                     output_type="auto"
-                                       ), lr_scheduler])
+              callbacks=[EarlyStopping(monitor='val_loss', patience=50000, min_delta=0.001
+                                       ), WandbCallback(save_model=False, log_weights=True,
+                                                        labels=LABELS.keys(), input_type="auto",
+                                                        output_type="auto"
+                                                        ), lr_scheduler])
     test_loss, test_accuracy = model.evaluate(x_test, y_test)
     print("Test accuracy", test_accuracy)
-    # wandb.log({'test_accuracy': test_accuracy})
-    # wandb.finish()
+    wandb.log({'test_accuracy': test_accuracy})
+    wandb.finish()
 
     # AFTER TRAINING
     if hyper_parameters["post_training_info"]:
-        predictions = model.predict(x_val)
-        y_pred = np.argmax(predictions, axis=1)
+        # predictions = model.predict(x_val)
+        # y_pred = np.argmax(predictions, axis=1)
 
-        cm = confusion_matrix(y_val, y_pred)
-        plt.figure(figsize=(16, 16))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=LABELS.keys(),
-                    yticklabels=LABELS.keys())
-        plt.title('Confusion Matrix')
-        plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.show()
+        # cm = confusion_matrix(y_val, y_pred)
+        # plt.figure(figsize=(16, 16))
+        # sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=LABELS.keys(),
+        #             yticklabels=LABELS.keys())
+        # plt.title('Confusion Matrix')
+        # plt.xlabel('Predicted')
+        # plt.ylabel('True')
+        # plt.show()
 
         predictions = model.predict(x_val)
         y_pred = np.argmax(predictions, axis=1)
@@ -209,7 +213,7 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
         key_list = list(LABELS.keys())
         val_list = list(LABELS.values())
 
-        for idx in misclassified_idx[:10]:
+        for idx in misclassified_idx:
             print(f"True label: {key_list[val_list.index(y_val[idx])]}, Predicted label: "
                   f"{key_list[val_list.index(y_pred[idx])]}, Sentence: {x_val_human_readable[idx]}")
 
@@ -217,17 +221,22 @@ def solve_the_document_classification_problem(hyper_parameters: Dict, wandb_grou
 def create_model(input_dim: int, input_length: int, num_classes: int, output_dim: int):
     model = Sequential()  # to jest zawsze
     model.add(Embedding(input_dim=input_dim, output_dim=output_dim, input_length=input_length))  # to jest zawsze
-    # model.add(LSTM(128, activation="relu", return_sequences=True))
-    # model.add(Dropout(0.2))
-    # model.add(LSTM(128, activation="relu"))
-    # model.add(Dropout(0.2))
+    #model.add(Dropout(0.2))
+#    model.add(SpatialDropout1D(0.1))
+    model.add(LSTM(64, activation="relu"))
+    #model.add(Bidirectional(LSTM(256)))
+#    model.add(Dropout(0.1))
+    #model.add(LSTM(1))
+#    model.add(LSTM(32, activation="relu"))
+    #model.add(Dropout(0.2))
     # model.add(Dense(32, activation="relu"))
-    # model.add(Dropout(0.2))
+    #model.add(Dropout(0.2))
 
-    model.add(GlobalMaxPooling1D())  # tutaj potrzebne jest coś to zmieni wymiar z 3D na 2D
-    # model.add(SpatialDropout1D(0.1))
+    #model.add(GlobalMaxPooling1D())  # tutaj potrzebne jest coś to zmieni wymiar z 3D na 2D
+
     # model.add(Dropout(0.1))  # element do dospermiania
-    model.add(Dense(64, activation="relu"))  # element do dospermiania
+    # model.add(Dense(32, activation="relu"))  # element do dospermiania
+    #model.add(Dropout(0.1))
     # model.add(LSTM(64))
     # model.add(Dropout(0.1))  # element do dospermiania
     model.add(Dense(num_classes, activation='softmax'))  # to jest zawsze
@@ -237,22 +246,26 @@ def create_model(input_dim: int, input_length: int, num_classes: int, output_dim
 hyper_params = {
     "is_down_sampled": False,  # solid
     "polish_chars_removed": False,  # solid
-    "numbers_replaced_with_single_word": True,  # solid
-    "nr_of_epochs": 60,
+    "numbers_replaced_with_single_word": False,  # solid
+    "nr_of_epochs": 50,
     "test_val_size": 0.3,
     "val_size": 0.33,
     "threshold_of_cutting_sentences": 1000,  # disabled
     "learning_rate": 0.001,
-    "output_dim": 64,  # TODO to można dospermić
-    "batch_size": 128,  # solid
+    "output_dim": 64,
+    "batch_size": 256,  # solid
     "model_config": create_model,
-    "optimizer": "Adam",
-    "scheduler_threshold": 100,  # do pokombinowania
+    "optimizer": "AdamW",
+    "scheduler_threshold": 1135,  # do pokombinowania
     "loss": "sparse_categorical_crossentropy",  # TODO sprawdzić inne lossy jak np sparse_categorical_crossentropy
     "metrics": ["accuracy"],  # TODO sprawdzić inne metryki jak np sparse_categorical_accuracy albo categorical_accuracy
-    "post_training_info": True,
-    "wandb_group": "LSTM"  # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
+    "post_training_info": False,
+    "wandb_group": "LSTM",  # pamiętaj o zmianie tego kiedy zmieniasz model z dense na lstm
+    "wandb_name": "Final"
 }
 
-# TODO STRATYFIKACJA
-solve_the_document_classification_problem(hyper_parameters=hyper_params, wandb_group="Dense")
+solve_the_document_classification_problem(hyper_parameters=hyper_params,wandb_group="LSTM", wandb_name=f"1")
+
+# for i in range(10):
+#     solve_the_document_classification_problem(hyper_parameters=hyper_params,
+#                                               wandb_group="Dense", wandb_name=f"Final{i + 1}")
